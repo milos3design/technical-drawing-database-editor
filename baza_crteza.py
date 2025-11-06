@@ -27,14 +27,17 @@ except json.JSONDecodeError:
     messagebox.showerror("Greška", f"{JSON_FILE} nije validan JSON fajl!")
     data = []
 
-current_index = 0
+current_index = None
 search_results = []
+search_index = 0
 
 
 # --- Tkinter setup ---
 root = tk.Tk()
 root.title("Baza Crteza")
 root.geometry("1400x800")
+
+record_number_var = tk.StringVar()
 
 # Fonts and styles
 default_font = tkFont.nametofont("TkDefaultFont")
@@ -81,6 +84,7 @@ def load_record(idx):
     current_index = idx
     record_number_var.set(f"{idx+1}/{len(data)}")
 
+search_counter_var = tk.StringVar(value="")
 def do_search():
     global search_results, search_index
     key = search_field_var.get()
@@ -92,7 +96,10 @@ def do_search():
     if search_results:
         search_index = 0
         load_record(search_results[search_index])
+        search_counter_var.set(f"{search_index+1}/{len(search_results)}")
     else:
+        search_index = 0
+        search_counter_var.set("")
         messagebox.showinfo("Pretraga", "Ništa nije pronađeno!")
 
 def next_result():
@@ -103,9 +110,12 @@ def next_result():
     if search_index >= len(search_results):
         search_index = 0
     load_record(search_results[search_index])
+    search_counter_var.set(f"{search_index+1}/{len(search_results)}")
 
 ttk.Button(inner_frame, text="Traži", command=do_search).pack(side=tk.LEFT, padx=5)
 ttk.Button(inner_frame, text="Sledeći", command=next_result).pack(side=tk.LEFT, padx=5)
+ttk.Label(inner_frame, textvariable=search_counter_var, width=8, anchor="center").pack(side=tk.LEFT, padx=5)
+
 
 
 # --- Record Frame ---
@@ -142,7 +152,7 @@ entries["CRTEZBROJ"] = ttk.Entry(id_crtez_frame, width=30)
 entries["CRTEZBROJ"].pack(side=tk.LEFT, padx=(0, 10), ipady=4)
 
 # Open button
-open_btn = ttk.Button(id_crtez_frame, text="Open Drawing")
+open_btn = ttk.Button(id_crtez_frame, text="Otvori Crtež")
 open_btn.pack(side=tk.LEFT)
 
 make_entry(section1, "Naziv dela:", "NAZIVDELA", width=68)
@@ -176,52 +186,67 @@ make_entry(left_frame, "Magsifra:", "MAGSIFRA", width=50)
 right_frame = ttk.Frame(section3)
 right_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=15, pady=5)
 
-record_number_var = tk.StringVar()
-
 def add_record():
     global current_index, search_results
     # Clear all entry fields
     for f in FIELDS:
         entries[f].delete(0, tk.END)
-    current_index = len(data)  # new record index (at end)
+
+    if not data:
+        current_index = 0  # First record
+    else:
+        current_index = len(data)  # New record at end
+    
     record_number_var.set(f"{current_index+1}/{len(data)+1}")
-    search_results = []  # clear search
+    search_results = []
 
 def save_record():
     global current_index
+
     if current_index is None:
         return
+    
     if current_index >= len(data):
-        # New record, append
+        # New record at the end
         rec = {}
         data.append(rec)
     else:
+        # Existing record
         rec = data[current_index]
+    
+    ident_str = entries["IDENTBROJ"].get().strip()
+    if ident_str == "":
+        rec["IDENTBROJ"] = None
+    else:
+        try:
+            rec["IDENTBROJ"] = int(ident_str)
+        except ValueError:
+            messagebox.showerror("Greška", "IDENTBROJ mora biti broj!")
+            return
 
     for f in FIELDS:
+        if f == "IDENTBROJ":
+            continue
         val = entries[f].get().strip()
-        # Convert empty string to None (null in JSON)
-        if val == "":
-            rec[f] = None
-        else:
-            # Convert IDENTBROJ to int if possible
-            if f == "IDENTBROJ":
-                try:
-                    rec[f] = int(val)
-                except ValueError:
-                    rec[f] = val  # fallback if not a number
-            else:
-                rec[f] = val
+        rec[f] = None if val == "" else val
 
     with open(JSON_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
-    messagebox.showinfo("Save", "Record saved!")
+
+    messagebox.showinfo("Sačuvaj", "Unos sačuvan!")
 
 def delete_record():
     global current_index, search_results
     if not data or current_index is None:
         return
-    confirm = messagebox.askyesno("Delete", "Are you sure you want to delete this record?")
+    
+    crtez_broj = data[current_index].get("CRTEZBROJ", "")
+    if crtez_broj:
+        message = f"Da li ste sigurni da želite da izbrišete crtež {crtez_broj}?"
+    else:
+        message = "Da li ste sigurni da želite da izbrišete ovaj unos?"
+
+    confirm = messagebox.askyesno("BRISANJE", message)
     if not confirm:
         return
 
@@ -229,7 +254,7 @@ def delete_record():
     del data[current_index]
     with open(JSON_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
-    messagebox.showinfo("Delete", "Record deleted!")
+    messagebox.showinfo("Brisanje", "Unos izbrisan!")
 
     # Reset current index
     if len(data) == 0:
@@ -243,28 +268,12 @@ def delete_record():
         load_record(current_index)
 
     search_results = []  # clear search results
-    
-    # Reset current index
-    if current_index >= len(data):
-        current_index = len(data) - 1
-
-    # Clear search results to prevent invalid indices
-    search_results = []
-    
-    # Load next available record
-    if data:
-        load_record(current_index)
-    else:
-        # Clear all entries if no records left
-        for e in entries.values():
-            e.delete(0, tk.END)
-        record_number_var.set("0/0")
-
-add_button = ttk.Button(right_frame, text="Add New Record")
-add_button.pack(pady=5, fill=tk.X)
-save_button = ttk.Button(right_frame, text="Save Record")
+   
+save_button = ttk.Button(right_frame, text="Sačuvaj Unos")
 save_button.pack(pady=5, fill=tk.X)
-delete_button = ttk.Button(right_frame, text="Delete Record")
+add_button = ttk.Button(right_frame, text="Dodaj Novi Unos")
+add_button.pack(pady=5, fill=tk.X)
+delete_button = ttk.Button(right_frame, text="Izbriši Unos")
 delete_button.pack(pady=5, fill=tk.X)
 
 add_button.config(command=add_record)
@@ -283,12 +292,16 @@ def first_record():
 
 def prev_record():
     global current_index
+    if not data or current_index is None:
+        return
     if current_index > 0:
         current_index -= 1
         load_record(current_index)
 
 def goto_record():
     global current_index
+    if not data:
+        return
     try:
         idx = int(record_number_entry.get()) - 1
         if 0 <= idx < len(data):
@@ -299,12 +312,17 @@ def goto_record():
 
 def next_record_nav():
     global current_index
+    if not data or current_index is None:
+        return
+
     if current_index < len(data)-1:
         current_index += 1
         load_record(current_index)
 
 def last_record():
     global current_index
+    if not data:
+        return
     current_index = len(data)-1
     load_record(current_index)
 
@@ -335,6 +353,9 @@ open_btn.config(command=open_drawing)
 
 # --- Start ---
 if data:
+    current_index = 0
     load_record(0)
+else:
+    record_number_var.set("0/0")
 
 root.mainloop()
