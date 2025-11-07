@@ -41,33 +41,34 @@ root = tk.Tk()
 root.title("Baza Crteza Pomoćne mehanizacije - Pregled baze")
 root.geometry("1400x800")
 
-record_number_var = tk.StringVar()
-
-# Fonts and styles
+# --- Fonts ---
 default_font = tkFont.nametofont("TkDefaultFont")
 default_font.configure(family="Arial", size=12)
 root.option_add("*Font", default_font)
 
+# --- Colors ---
+app_bg = "#e8eff0"
+frame_bg = "#f6f9f9"
+entry_bg = "#ffffff"
+
+root.configure(bg=app_bg)
+
+# --- Styles ---
 style = ttk.Style()
 style.theme_use("clam")
 
-app_bg = "#e9f1ef"
-frame_bg = "#f3f8f5"
-
-root.configure(bg=app_bg)
-style.configure("TFrame", background=frame_bg)
+style.configure("TFrame", background=frame_bg, bordercolor="#dae4e6")
 style.configure("TLabel", background=frame_bg)
 style.configure("TButton", font=("Arial", 11, "bold"), padding=(10, 5))
+style.configure("Readonly.TEntry", fieldbackground="#ffffff", foreground="#000000", bordercolor="#dae4e6", padding=(5, 2)) 
 
-style.configure("Readonly.TEntry",
-                fieldbackground="#ffffff",
-                foreground="#000000",
-                padding=(5, 2)) 
 
+title_label = ttk.Label(root, text="Baza Crteža Pomoćne Mehanizacije", font=("Arial", 18, "bold"), background=app_bg, foreground="#333333", anchor="center")
+title_label.pack(side="top", fill="x", pady=10)
 
 # --- Search frame ---
-search_frame = ttk.Frame(root, padding=10, relief="flat", borderwidth=1)
-search_frame.pack(fill=tk.X, padx=10, pady=10)
+search_frame = ttk.Frame(root, relief="flat", borderwidth=1)
+search_frame.pack(fill=tk.X, padx=10, pady=5)
 
 search_field_var = tk.StringVar(value="CRTEZBROJ")
 search_value_var = tk.StringVar()
@@ -81,6 +82,8 @@ search_field_menu.pack(side=tk.LEFT, padx=5)
 ttk.Label(inner_frame, text="Vrednost:").pack(side=tk.LEFT, padx=(15,0))
 search_value_entry = ttk.Entry(inner_frame, textvariable=search_value_var, width=30, justify='center')
 search_value_entry.pack(side=tk.LEFT, padx=0, pady=5, ipadx=5, ipady=8)
+
+record_number_var = tk.StringVar()
 
 def normalize(s):
     if not s:
@@ -139,12 +142,12 @@ ttk.Label(inner_frame, textvariable=search_counter_var, width=8, anchor="center"
 
 
 # --- Record Frame ---
-record_frame = ttk.Frame(root, padding=10, relief="flat", borderwidth=1)
-record_frame.pack(fill=tk.BOTH, padx=10, pady=10)
+record_frame = ttk.Frame(root, padding=(10,10), relief="flat", borderwidth=1)
+record_frame.pack(fill=tk.BOTH, padx=10, pady=0)
 
 entries = {}
 
-def make_entry(parent, label_text, field_name, width=30, ipady=1):
+def make_entry(parent, label_text, field_name, width=30, ipady=0):
     frame = ttk.Frame(parent)
     frame.pack(fill=tk.X, pady=4)
     ttk.Label(frame, text=label_text, width=15, anchor="w").pack(side=tk.LEFT)
@@ -163,17 +166,17 @@ id_crtez_frame.pack(fill=tk.X, pady=5)
 
 # ID Broj
 ttk.Label(id_crtez_frame, text="ID Broj:", width=15, anchor="w").pack(side=tk.LEFT)
-entries["IDENTBROJ"] = ttk.Entry(id_crtez_frame, width=25, style="Readonly.TEntry", state='readonly')
-entries["IDENTBROJ"].pack(side=tk.LEFT, padx=(0, 15), ipady=4)
+entries["IDENTBROJ"] = ttk.Entry(id_crtez_frame, width=20, style="Readonly.TEntry", state='readonly')
+entries["IDENTBROJ"].pack(side=tk.LEFT, padx=(0, 18), ipady=4)
 
 # Broj crteža
 ttk.Label(id_crtez_frame, text="Broj crteža:", width=10, anchor="w").pack(side=tk.LEFT)
-entries["CRTEZBROJ"] = ttk.Entry(id_crtez_frame, width=30, style="Readonly.TEntry", state='readonly')
+entries["CRTEZBROJ"] = ttk.Entry(id_crtez_frame, width=35, style="Readonly.TEntry", state='readonly')
 entries["CRTEZBROJ"].pack(side=tk.LEFT, padx=(0, 10), ipady=4)
 
 # Open button
 open_btn = ttk.Button(id_crtez_frame, text="Otvori Crtež")
-open_btn.pack(side=tk.LEFT)
+open_btn.pack(side=tk.LEFT, padx=10, ipadx=15)
 
 make_entry(section1, "Naziv dela:", "NAZIVDELA", width=68, ipady=2)
 make_entry(section1, "Tehnički podaci:", "TEHNPODACI", width=68, ipady=2)
