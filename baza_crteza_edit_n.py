@@ -9,9 +9,32 @@ from openpyxl import Workbook
 import shutil
 from datetime import datetime
 
-EXCEL_FILE = "BAZACRTEZA.xlsx"
-DRAWINGS_FOLDER = "crtezi"
-BACKUP_FOLDER = r"C:\bazacrteza\backup"
+def load_config():
+    config_file = "config.txt"
+    config = {}
+    
+    if os.path.exists(config_file):
+        try:
+            with open(config_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith('#'):
+                        continue
+                    if '=' in line:
+                        key, value = line.split('=', 1)
+                        config[key.strip()] = value.strip()
+        except Exception as e:
+            print(f"Error reading config.txt: {e}")
+    
+    return config
+
+config = load_config()
+BASE_FOLDER = config.get("BASE_FOLDER", ".")
+EXCEL_FILENAME = config.get("EXCEL_FILENAME", "BAZACRTEZA.xlsx")
+
+EXCEL_FILE = os.path.join(BASE_FOLDER, EXCEL_FILENAME)
+DRAWINGS_FOLDER = os.path.join(BASE_FOLDER, "crtezi")
+BACKUP_FOLDER = config.get("BACKUP_FOLDER", os.path.join(".", "backup"))
 
 FIELDS = [
     "IDENTBROJ", "CRTEZBROJ", "NAZIVDELA", "TEHNPODACI",
@@ -86,7 +109,7 @@ search_index = 0
 
 # --- Tkinter setup ---
 root = tk.Tk()
-root.title("Baza Crteza Pomoćne mehanizacije - Editor")
+root.title("Baza Crteza Pomoćne mehanizacije - Editor - Verzija 1.0 - M.Petković")
 root.geometry("1400x800")
 
 # Show error if data loading failed
