@@ -4,7 +4,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import tkinter.font as tkFont
 import webbrowser
-import pandas as pd
+from openpyxl import load_workbook
 
 EXCEL_FILE = "BAZACRTEZA.xlsx"
 DRAWINGS_FOLDER = "crtezi"
@@ -16,30 +16,52 @@ FIELDS = [
     "KATALOG", "MAGSIFRA"
 ]
 
-# --- Load Excel ---
-try:
-    df = pd.read_excel(EXCEL_FILE)
-    # Replace NaN with None for consistency
-    df = df.where(pd.notna(df), None)
-    data = df.to_dict('records')
-except FileNotFoundError:
-    messagebox.showerror("Greška", f"{EXCEL_FILE} nije pronađen!")
-    data = []
-    df = pd.DataFrame(columns=FIELDS)
-except Exception as e:
-    messagebox.showerror("Greška", f"Greška pri učitavanju {EXCEL_FILE}: {str(e)}")
-    data = []
-    df = pd.DataFrame(columns=FIELDS)
+# --- Load Excel with openpyxl (much lighter than pandas) ---
+def load_excel_data(filename):
+    """Load Excel data using openpyxl instead of pandas"""
+    try:
+        wb = load_workbook(filename, read_only=True, data_only=True)
+        ws = wb.active
+        
+        # Get headers from first row
+        headers = [cell.value for cell in ws[1]]
+        
+        # Load data rows
+        data = []
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            record = {}
+            for i, header in enumerate(headers):
+                # Handle None values and convert to appropriate types
+                value = row[i] if i < len(row) else None
+                record[header] = None if value is None else str(value).strip() if value != "" else None
+            data.append(record)
+        
+        wb.close()
+        return data, None
+    except FileNotFoundError:
+        return [], f"{filename} nije pronađen!"
+    except Exception as e:
+        return [], f"Greška pri učitavanju {filename}: {str(e)}"
+
+data, error = load_excel_data(EXCEL_FILE)
 
 current_index = None
 search_results = []
 search_index = 0
 
-
 # --- Tkinter setup ---
 root = tk.Tk()
 root.title("Baza Crteza Pomoćne mehanizacije - Pregled baze")
 root.geometry("1400x800")
+
+# Show error if data loading failed
+if error:
+    root.withdraw()
+    messagebox.showerror("Greška", error)
+    if not data:
+        root.destroy()
+        exit()
+    root.deiconify()
 
 # --- Fonts ---
 default_font = tkFont.nametofont("TkDefaultFont")
@@ -49,7 +71,6 @@ root.option_add("*Font", default_font)
 # --- Colors ---
 app_bg = "#e8eff0"
 frame_bg = "#f6f9f9"
-entry_bg = "#ffffff"
 
 root.configure(bg=app_bg)
 
@@ -60,10 +81,12 @@ style.theme_use("clam")
 style.configure("TFrame", background=frame_bg, bordercolor="#dae4e6")
 style.configure("TLabel", background=frame_bg)
 style.configure("TButton", font=("Arial", 11, "bold"), padding=(10, 5))
-style.configure("Readonly.TEntry", fieldbackground="#ffffff", foreground="#000000", bordercolor="#dae4e6", padding=(5, 2)) 
+style.configure("Readonly.TEntry", fieldbackground="#ffffff", foreground="#000000", 
+                bordercolor="#dae4e6", padding=(5, 2))
 
-
-title_label = ttk.Label(root, text="Baza Crteža Pomoćne Mehanizacije", font=("Arial", 18, "bold"), background=app_bg, foreground="#333333", anchor="center")
+title_label = ttk.Label(root, text="Baza Crteža Pomoćne Mehanizacije", 
+                        font=("Arial", 18, "bold"), background=app_bg, 
+                        foreground="#333333", anchor="center")
 title_label.pack(side="top", fill="x", pady=10)
 
 # --- Search frame ---
@@ -77,23 +100,28 @@ inner_frame = ttk.Frame(search_frame)
 inner_frame.pack()
 
 ttk.Label(inner_frame, text="Traži u:").pack(side=tk.LEFT, padx=0)
-search_field_menu = ttk.Combobox(inner_frame, textvariable=search_field_var, values=FIELDS, width=15)
+search_field_menu = ttk.Combobox(inner_frame, textvariable=search_field_var, 
+                                  values=FIELDS, width=15, state="readonly")
 search_field_menu.pack(side=tk.LEFT, padx=5)
-ttk.Label(inner_frame, text="Vrednost:").pack(side=tk.LEFT, padx=(15,0))
-search_value_entry = ttk.Entry(inner_frame, textvariable=search_value_var, width=30, justify='center')
+ttk.Label(inner_frame, text="Vrednost:").pack(side=tk.LEFT, padx=(15, 0))
+search_value_entry = ttk.Entry(inner_frame, textvariable=search_value_var, 
+                               width=30, justify='center')
 search_value_entry.pack(side=tk.LEFT, padx=0, pady=5, ipadx=5, ipady=8)
 
 record_number_var = tk.StringVar()
 
 def normalize(s):
+    """Normalize string for comparison"""
     if not s:
         return ""
     return re.sub(r"\W+", "", str(s).lower())
 
 def load_record(idx):
+    """Load record at given index into UI"""
     global current_index
-    if not data:
+    if not data or idx < 0 or idx >= len(data):
         return
+    
     rec = data[idx]
     for f in FIELDS:
         entry = entries.get(f)
@@ -103,51 +131,92 @@ def load_record(idx):
             val = rec.get(f)
             entry.insert(0, "" if val is None else str(val))
             entry.configure(state='readonly')
+    
     current_index = idx
-    record_number_var.set(f"{idx+1}/{len(data)}")
+    record_number_var.set(f"{idx + 1}/{len(data)}")
 
 search_counter_var = tk.StringVar(value="")
 
 def do_search():
+    """Perform search in selected field"""
     global search_results, search_index
+    
     key = search_field_var.get()
-    val = re.sub(r"\W+", "", search_value_var.get().strip().lower())
+    val = normalize(search_value_var.get().strip())
+    
+    if not val:
+        messagebox.showinfo("Pretraga", "Unesite vrednost za pretragu!")
+        return
+    
     search_results = [
         i for i, rec in enumerate(data)
         if val in normalize(rec.get(key))
     ]
+    
     if search_results:
         search_index = 0
         load_record(search_results[search_index])
-        search_counter_var.set(f"{search_index+1}/{len(search_results)}")
+        search_counter_var.set(f"{search_index + 1}/{len(search_results)}")
     else:
         search_index = 0
         search_counter_var.set("")
         messagebox.showinfo("Pretraga", "Ništa nije pronađeno!")
 
 def next_result():
+    """Navigate to next search result"""
     global search_index
     if not search_results:
         return
-    search_index += 1
-    if search_index >= len(search_results):
-        search_index = 0
+    search_index = (search_index + 1) % len(search_results)
     load_record(search_results[search_index])
-    search_counter_var.set(f"{search_index+1}/{len(search_results)}")
+    search_counter_var.set(f"{search_index + 1}/{len(search_results)}")
 
-ttk.Button(inner_frame, text="Traži", command=do_search).pack(side=tk.LEFT, padx=(15,5))
+def refresh_data():
+    """Reload data from Excel file"""
+    global data, current_index, search_results
+    
+    new_data, error = load_excel_data(EXCEL_FILE)
+    
+    if error:
+        messagebox.showerror("Greška", error)
+        return
+    
+    data = new_data
+    search_results = []  # Clear search results
+    
+    # Try to stay on same record or go to first
+    if current_index is not None and current_index < len(data):
+        load_record(current_index)
+    elif data:
+        load_record(0)
+    else:
+        current_index = None
+        for e in entries.values():
+            e.configure(state='normal')
+            e.delete(0, tk.END)
+            e.configure(state='readonly')
+        record_number_var.set("0/0")
+    
+    messagebox.showinfo("Osveženo", "Podaci su uspešno osveženi!")
+
+
+# Bind Enter key to search
+search_value_entry.bind('<Return>', lambda e: do_search())
+
+ttk.Button(inner_frame, text="Traži", command=do_search).pack(side=tk.LEFT, padx=(15, 5))
 ttk.Button(inner_frame, text="Sledeći", command=next_result).pack(side=tk.LEFT, padx=5)
-ttk.Label(inner_frame, textvariable=search_counter_var, width=8, anchor="center").pack(side=tk.LEFT, padx=5)
-
-
+ttk.Label(inner_frame, textvariable=search_counter_var, width=8, 
+          anchor="center").pack(side=tk.LEFT, padx=5)
+ttk.Button(inner_frame, text="Osveži", command=refresh_data).pack(side=tk.LEFT, padx=(15, 5))
 
 # --- Record Frame ---
-record_frame = ttk.Frame(root, padding=(10,10), relief="flat", borderwidth=1)
+record_frame = ttk.Frame(root, padding=(10, 10), relief="flat", borderwidth=1)
 record_frame.pack(fill=tk.BOTH, padx=10, pady=0)
 
 entries = {}
 
 def make_entry(parent, label_text, field_name, width=30, ipady=0):
+    """Create labeled entry field"""
     frame = ttk.Frame(parent)
     frame.pack(fill=tk.X, pady=4)
     ttk.Label(frame, text=label_text, width=15, anchor="w").pack(side=tk.LEFT)
@@ -155,7 +224,6 @@ def make_entry(parent, label_text, field_name, width=30, ipady=0):
     e.pack(side=tk.LEFT, fill=tk.X, ipady=ipady, ipadx=5)
     entries[field_name] = e
     return e
-
 
 # --- Section 1: Basic Info ---
 section1 = ttk.Frame(record_frame, padding=10, relief="groove", borderwidth=1)
@@ -166,12 +234,14 @@ id_crtez_frame.pack(fill=tk.X, pady=5)
 
 # ID Broj
 ttk.Label(id_crtez_frame, text="ID Broj:", width=15, anchor="w").pack(side=tk.LEFT)
-entries["IDENTBROJ"] = ttk.Entry(id_crtez_frame, width=20, style="Readonly.TEntry", state='readonly')
+entries["IDENTBROJ"] = ttk.Entry(id_crtez_frame, width=20, style="Readonly.TEntry", 
+                                  state='readonly')
 entries["IDENTBROJ"].pack(side=tk.LEFT, padx=(0, 18), ipady=4)
 
 # Broj crteža
 ttk.Label(id_crtez_frame, text="Broj crteža:", width=10, anchor="w").pack(side=tk.LEFT)
-entries["CRTEZBROJ"] = ttk.Entry(id_crtez_frame, width=35, style="Readonly.TEntry", state='readonly')
+entries["CRTEZBROJ"] = ttk.Entry(id_crtez_frame, width=35, style="Readonly.TEntry", 
+                                  state='readonly')
 entries["CRTEZBROJ"].pack(side=tk.LEFT, padx=(0, 10), ipady=4)
 
 make_entry(section1, "Naziv dela:", "NAZIVDELA", width=68, ipady=2)
@@ -179,20 +249,27 @@ make_entry(section1, "Tehnički podaci:", "TEHNPODACI", width=68, ipady=2)
 
 # Open button
 def open_drawing():
+    """Open drawing file in default image viewer"""
     crtez = entries["CRTEZBROJ"].get().strip()
     if not crtez:
+        messagebox.showinfo("Otvori crtež", "Broj crteža nije specificiran!")
         return
+    
+    # Clean filename
     filename = crtez.replace("/", "-").replace("\\", "-") + ".jpg"
     path = os.path.join(DRAWINGS_FOLDER, filename)
+    
     if os.path.exists(path):
-        webbrowser.open(path)
+        try:
+            webbrowser.open(os.path.abspath(path))
+        except Exception as e:
+            messagebox.showerror("Greška", f"Nije moguće otvoriti fajl: {str(e)}")
     else:
-        messagebox.showinfo("Otvori crtež", f"Fajl nije pronađen: {path}")
+        messagebox.showwarning("Otvori crtež", 
+                              f"Fajl nije pronađen:\n{filename}\n\nProverite da li fajl postoji u folderu '{DRAWINGS_FOLDER}'")
 
-open_btn = ttk.Button(id_crtez_frame, text="Otvori Crtež")
+open_btn = ttk.Button(id_crtez_frame, text="Otvori Crtež", command=open_drawing)
 open_btn.pack(side=tk.LEFT, padx=10, ipadx=15)
-open_btn.config(command=open_drawing)
-
 
 # --- Section 2: Catalog Info ---
 section2 = ttk.Frame(record_frame, padding=10, relief="groove", borderwidth=1)
@@ -202,8 +279,7 @@ make_entry(section2, "Kataloški broj:", "KATALBROJ", width=25)
 make_entry(section2, "Format:", "FORMAT", width=10)
 make_entry(section2, "Arhiva:", "ARHIVA", width=10)
 
-
-# --- Section 3: All entries (no buttons) ---
+# --- Section 3: Additional Info ---
 section3 = ttk.Frame(record_frame, padding=10, relief="groove", borderwidth=1)
 section3.pack(fill=tk.BOTH, expand=True, pady=10)
 
@@ -215,70 +291,59 @@ make_entry(section3, "Objekat4:", "OBJEKAT4", width=50)
 make_entry(section3, "Katalog:", "KATALOG", width=50)
 make_entry(section3, "Magsifra:", "MAGSIFRA", width=50)
 
-
 # --- Navigation Frame ---
 nav_frame = ttk.Frame(root, padding=15)
 nav_frame.pack(side="bottom", fill=tk.X, padx=10, pady=10)
 
 def first_record():
-    global current_index
-    if not data:
-        return
-    current_index = 0
-    load_record(current_index)
+    """Go to first record"""
+    if data:
+        load_record(0)
 
 def prev_record():
+    """Go to previous record"""
     global current_index
-    if not data or current_index is None:
-        return
-    if current_index > 0:
-        current_index -= 1
-        load_record(current_index)
+    if data and current_index is not None and current_index > 0:
+        load_record(current_index - 1)
 
 def goto_record():
-    global current_index
+    """Go to specific record number"""
     if not data:
         return
     try:
         idx = int(record_number_entry.get()) - 1
         if 0 <= idx < len(data):
-            current_index = idx
-            load_record(current_index)
+            load_record(idx)
+        else:
+            messagebox.showwarning("Greška", 
+                                  f"Unesite broj između 1 i {len(data)}")
     except ValueError:
-        pass
+        messagebox.showwarning("Greška", "Unesite validan broj!")
 
 def next_record_nav():
+    """Go to next record"""
     global current_index
-    if not data or current_index is None:
-        return
-
-    if current_index < len(data)-1:
-        current_index += 1
-        load_record(current_index)
+    if data and current_index is not None and current_index < len(data) - 1:
+        load_record(current_index + 1)
 
 def last_record():
-    global current_index
-    if not data:
-        return
-    current_index = len(data)-1
-    load_record(current_index)
+    """Go to last record"""
+    if data:
+        load_record(len(data) - 1)
 
 ttk.Button(nav_frame, text="<< Prvi", command=first_record).pack(side=tk.LEFT, padx=5)
-ttk.Button(nav_frame, text="<< Prethodni", command=prev_record).pack(side=tk.LEFT, padx=5)
+ttk.Button(nav_frame, text="< Prethodni", command=prev_record).pack(side=tk.LEFT, padx=5)
 ttk.Label(nav_frame, text="Unos:").pack(side=tk.LEFT, padx=5)
-record_number_entry = ttk.Entry(nav_frame, width=12, textvariable=record_number_var, justify='center')
+record_number_entry = ttk.Entry(nav_frame, width=12, textvariable=record_number_var, 
+                                justify='center')
 record_number_entry.pack(side=tk.LEFT, ipady=5)
+record_number_entry.bind('<Return>', lambda e: goto_record())
 ttk.Button(nav_frame, text="Idi", command=goto_record).pack(side=tk.LEFT, padx=5)
-ttk.Button(nav_frame, text="Sledeći >>", command=next_record_nav).pack(side=tk.LEFT, padx=5)
+ttk.Button(nav_frame, text="Sledeći >", command=next_record_nav).pack(side=tk.LEFT, padx=5)
 ttk.Button(nav_frame, text="Poslednji >>", command=last_record).pack(side=tk.LEFT, padx=5)
 
-
-
-
-
-# --- Start ---
+# --- Initialize ---
 if data:
-    current_index = 0
     load_record(0)
 else:
     record_number_var.set("0/0")

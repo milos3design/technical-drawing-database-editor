@@ -173,12 +173,24 @@ ttk.Label(id_crtez_frame, text="Broj crteža:", width=10, anchor="w").pack(side=
 entries["CRTEZBROJ"] = ttk.Entry(id_crtez_frame, width=30)
 entries["CRTEZBROJ"].pack(side=tk.LEFT, padx=(0, 10), ipady=4)
 
-# Open button
-open_btn = ttk.Button(id_crtez_frame, text="Otvori Crtež")
-open_btn.pack(side=tk.LEFT)
-
 make_entry(section1, "Naziv dela:", "NAZIVDELA", width=68)
 make_entry(section1, "Tehnički podaci:", "TEHNPODACI", width=68)
+
+# Open button
+def open_drawing():
+    crtez = entries["CRTEZBROJ"].get().strip()
+    if not crtez:
+        return
+    filename = crtez.replace("/", "-").replace("\\", "-") + ".jpg"
+    path = os.path.join(DRAWINGS_FOLDER, filename)
+    if os.path.exists(path):
+        webbrowser.open(path)
+    else:
+        messagebox.showinfo("Otvori crtež", f"Fajl nije pronađen: {path}")
+
+open_btn = ttk.Button(id_crtez_frame, text="Otvori Crtež")
+open_btn.pack(side=tk.LEFT)
+open_btn.config(command=open_drawing)
 
 
 # --- Section 2: Catalog Info ---
@@ -363,21 +375,6 @@ record_number_entry.pack(side=tk.LEFT, ipady=5)
 ttk.Button(nav_frame, text="Idi", command=goto_record).pack(side=tk.LEFT, padx=5)
 ttk.Button(nav_frame, text="Sledeći >>", command=next_record_nav).pack(side=tk.LEFT, padx=5)
 ttk.Button(nav_frame, text="Poslednji >>", command=last_record).pack(side=tk.LEFT, padx=5)
-
-
-def open_drawing():
-    crtez = entries["CRTEZBROJ"].get().strip()
-    if not crtez:
-        return
-    filename = crtez.replace("/", "-").replace("\\", "-") + ".jpg"
-    path = os.path.join(DRAWINGS_FOLDER, filename)
-    if os.path.exists(path):
-        webbrowser.open(path)
-    else:
-        messagebox.showinfo("Otvori crtež", f"Fajl nije pronađen: {path}")
-
-open_btn.config(command=open_drawing)
-
 
 
 # --- Start ---
